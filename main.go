@@ -2,14 +2,36 @@ package main
 
 import (
 	"fmt"
+	"html/template"
+	"os"
+	// "strings"
 
-	"github.com/fatih/color"
 	"github.com/nlopes/slack"
 	"github.com/pelletier/go-toml"
+	"github.com/russross/blackfriday"
 )
 
-func init() {
-	color.NoColor = false
+// Data to put into  template
+type Page struct {
+	Title string
+	Body  string
+}
+
+// The template
+var templateText string = `
+<head>
+  <title>{{.Title}}</title>
+</head>
+
+<body>
+  {{.Body | markDown}}
+</body>
+`
+
+// Real blackfriday functionality commented out, using strings.ToLower for demo
+func markDowner(args ...interface{}) template.HTML {
+	return template.HTML(blackfriday.MarkdownCommon([]byte(fmt.Sprintf("%s", args...))))
+	// return template.HTML(strings.ToLower(fmt.Sprintf("%s", args...)))
 }
 
 func main() {
@@ -31,7 +53,7 @@ func main() {
 	for _, user := range users {
 		users_map[user.ID] = user.Name
 	}
-	fmt.Printf("%#v\n", users_map)
+	text := ""
 
 	// Get all starred items.
 	starParams := slack.NewStarsParameters()
@@ -49,15 +71,22 @@ func main() {
 					continue
 				}
 				user := users_map[star.Message.Msg.User]
-				printStarredMessage(user, star.Message.Msg.Text)
+				text += fmt.Sprintf("## @%s\n\n%s\n\n", user, star.Message.Msg.Text)
 			}
 		}
 		pages = paging.Pages
 		starParams.Page++
 	}
-}
 
-func printStarredMessage(username, text string) {
-	yellow := color.New(color.FgYellow).SprintFunc()
-	fmt.Printf("%s\t%s\n", yellow("@"+username), text)
+	// Create a page
+	p := &Page{Title: "A Test Demo", Body: text}
+
+	// Parse the template and add the function to the funcmap
+	tmpl := template.Must(template.New("page.html").Funcs(template.FuncMap{"markDown": markDowner}).Parse(templateText))
+
+	// Execute the template
+	err = tmpl.ExecuteTemplate(os.Stdout, "page.html", p)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
